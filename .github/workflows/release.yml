@@ -3,7 +3,7 @@ name: Release Go Binary
 on:
   push:
     tags:
-      - "v*.*.*"   # Trigger only on version tags like v1.0.0
+      - "v*.*.*"
 
 jobs:
   build:
@@ -26,32 +26,29 @@ jobs:
         run: |
           mkdir -p dist
           EXT=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            EXT=".exe"
-          fi
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-          go build -o dist/whatsapp-bot-${{ matrix.goos }}-${{ matrix.goarch }}$EXT
+          go build -o dist/myapp-${{ matrix.goos }}-${{ matrix.goarch }}$EXT
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
-          path: dist/
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
 
   release:
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download binaries
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
           path: dist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/*
+          files: dist/**/*   # downloads all binaries from all jobs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
