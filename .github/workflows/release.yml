@@ -1,69 +1,53 @@
-name: Release Go Binary
+name: Cross-Platform Build and Release
 
 on:
   push:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build Go Binaries
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        include:
-          - goos: android
-            goarch: amd64
-          - goos: android
-            goarch: arm64
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
 
-      - name: Build binary
+      # --- ANDROID NDK ---
+      - name: Install Android NDK
         run: |
-          mkdir -p dist
-          output="dist/myapp-${{ matrix.goos }}-${{ matrix.goarch }}"
+          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+          unzip -qq android-ndk-r26b-linux.zip
+          echo "$PWD/android-ndk-r26b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            output="${output}.exe"
-          fi
+      - name: Build Binaries
+        run: |
+          mkdir -p bin
 
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o "$output" .
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -o bin/app-linux-amd64 main.go
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -o bin/app-linux-arm64 main.go
 
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
+          # Windows AMD64
+          GOOS=windows GOARCH=amd64 go build -o bin/app-windows-amd64.exe main.go
 
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
+          # Android ARM64 (using NDK)
+          export CC=aarch64-linux-android21-clang
+          CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -o bin/app-android-arm64 main.go
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            bin/*
+          generate_release_notes: true
